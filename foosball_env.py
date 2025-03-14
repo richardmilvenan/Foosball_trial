@@ -46,19 +46,22 @@ class FoosballEnvCfg(DirectMARLEnvCfg):
     # robot
     robot_cfg: ArticulationCfg = FOOSBALL_CFG.replace(prim_path="/World/envs/env_.*/Foosball")
     
-    actuated_joint_names = [
+    protagonist_actuated_joint_names = [
         "Keeper_W_PrismaticJoint",
         "Defense_W_PrismaticJoint",
         "Mid_W_PrismaticJoint",
         "Offense_W_PrismaticJoint",
-        "Keeper_B_PrismaticJoint",
-        "Defense_B_PrismaticJoint",
-        "Mid_B_PrismaticJoint",
-        "Offense_B_PrismaticJoint",
         "Keeper_W_RevoluteJoint",
         "Defense_W_RevoluteJoint",
         "Mid_W_RevoluteJoint",
         "Offense_W_RevoluteJoint",
+    ]
+
+    antagonist_actuated_joint_names = [
+        "Keeper_B_PrismaticJoint",
+        "Defense_B_PrismaticJoint",
+        "Mid_B_PrismaticJoint",
+        "Offense_B_PrismaticJoint",
         "Keeper_B_RevoluteJoint",
         "Defense_B_RevoluteJoint",
         "Mid_B_RevoluteJoint",
@@ -96,8 +99,11 @@ class FoosballEnvCfg(DirectMARLEnvCfg):
     #initial_pendulum_angle_range = [-0.25, 0.25]  # the range in which the pendulum angle is sampled from on reset [rad]
 
     # action scales
-    #cart_action_scale = 100.0  # [N]
-    #pendulum_action_scale = 50.0  # [Nm]
+    # scales and constants
+    fall_dist = 0.24
+    vel_obs_scale = 0.2
+    act_moving_average = 1.0
+
 
     # reward scales
     #rew_scale_alive = 1.0
@@ -116,28 +122,22 @@ class FoosballEnv(DirectMARLEnv):
     def __init__(self, cfg: FoosballEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        self._cart_dof_idx, _ = self.robot.find_joints(self.cfg.cart_dof_name)
-        self._pole_dof_idx, _ = self.robot.find_joints(self.cfg.pole_dof_name)
-        self._pendulum_dof_idx, _ = self.robot.find_joints(self.cfg.pendulum_dof_name)
+           
+        self.white_dof_indices = list()
+        for joint_name in cfg.white_joint_names:
+            self.white_dof_indices.append(self.cfg.joint_names.index(joint_name))
+        self.white_dof_indices.sort()
+    
+
+
+        self.black_dof_indices = list()
+        for joint_name in cfg.black_joint_names:
+            self.black_dof_indices.append(self.cfg.joint_names.index(joint_name))
+        self.black_dof_indices.sort()
 
         self.joint_pos = self.robot.data.joint_pos
         self.joint_vel = self.robot.data.joint_vel
 
-    def get_game_ball(self) -> None:
-        ball_path = self.default_zero_env_path + "/Foosball/Ball"
-        self._init_ball_position = torch.tensor(
-            [[0, 0, 0.79025]], device=self.device
-        ).repeat(self.num_envs, 1)
-        self._init_ball_rotation = torch.tensor(
-            [[1, 0, 0, 0]], device=self.device
-        ).repeat(self.num_envs, 1)
-        self._init_ball_velocities = torch.zeros((self.num_envs, 6), device=self.device)
-        self._ball_radius = 0.01725
-
-        self._sim_config.apply_articulation_settings(
-            "Ball", get_prim_at_path(ball_path),
-            self._sim_config.parse_actor_config("Ball")
-        )
 
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot_cfg)
@@ -147,13 +147,15 @@ class FoosballEnv(DirectMARLEnv):
         self.scene.clone_environments(copy_from_source=False)
         # add Table to scene
         self.scene.articulations["robot"] = self.robot
+        self.scene.rigid_objects["object"] = self.object
+        #Add Ball to Scene
+        self.object = RigidObject(self.cfg.object_cfg)
 
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
-        #add ball
-        self.get_game_ball()
+
 
 
     def _pre_physics_step(self, actions: dict[str, torch.Tensor]) -> None:
@@ -161,10 +163,10 @@ class FoosballEnv(DirectMARLEnv):
 
     def _apply_action(self) -> None:
         self.robot.set_joint_effort_target(
-            self.actions["cart"] * self.cfg.cart_action_scale, joint_ids=self._cart_dof_idx
+            self.actions["protagonist"], joint_ids=self.white_dof_indices
         )
         self.robot.set_joint_effort_target(
-            self.actions["pendulum"] * self.cfg.pendulum_action_scale, joint_ids=self._pendulum_dof_idx
+            self.actions["antagonist"] , joint_ids=self.black_dof_indices
         )
 
     def _get_observations(self) -> dict[str, torch.Tensor]:
