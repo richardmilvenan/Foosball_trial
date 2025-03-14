@@ -17,7 +17,7 @@ from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
 
 FOOSBALL_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
-        usd_path=r"C:\Users\richa\Downloads\Foosball_instanceable.usd",  #current USD Location
+        usd_path=r"C:\Users\richa\Downloads\Foosball_no_ball.usd",  #current USD Location
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             rigid_body_enabled=True,
             #max_linear_velocity=1000.0,
@@ -72,9 +72,3 @@ FOOSBALL_CFG = ArticulationCfg(
     },
 
 )
-
-
-
-
-
-"""Configuration for a Foosball."""
